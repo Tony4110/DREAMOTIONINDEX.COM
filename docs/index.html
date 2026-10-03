@@ -35,6 +35,14 @@
   .lede{padding-block:22px 8px}
   .lede p{margin:0;color:var(--muted);max-width:66ch;font-size:15px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-block:20px 40px}
+  .alerts{display:flex;flex-direction:column;gap:8px;padding-block:6px 0}
+  .apanel{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:12px;padding:12px 14px;font-size:14px}
+  .ahead{display:flex;align-items:center;gap:10px;margin:2px 0}
+  .ahead .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .acount{font-family:var(--font-mono);font-size:11px;background:var(--crit);color:#fff;border-radius:999px;padding:1px 8px}
+  .arow{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:13.5px}
+  .arow.crit{border-left:3px solid var(--crit)} .arow.warn{border-left:3px solid var(--warn)}
+  .asite{font-weight:600;min-width:72px;flex:none} .amsg{color:var(--muted);min-width:0}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;
     display:flex;flex-direction:column;gap:14px;min-width:0}
   .card.err{opacity:.85}
@@ -80,6 +88,7 @@
   <section class="lede">
     <p>État de santé et intelligence quotidienne de chaque index : la capture a-t-elle tourné, les données sont-elles fraîches, et qu'est-ce qui a bougé. Lecture live des bases — rien n'est stocké ici.</p>
   </section>
+  <section class="alerts" id="alerts" hidden></section>
   <section class="grid" id="grid"></section>
   <footer id="foot">Tour de contrôle Dreamotion · lecture seule.</footer>
 </div>
@@ -128,8 +137,9 @@ async function maia(site){
   } else { blockTitle='Top crédibilité';
     blockHTML=rows.slice(0,4).map(r=>mv(r.ingredients?.name,null,Math.round(r.credibility_score)+'/100')).join('');
   }
+  const strongMovers=rows.filter(r=>r.trend_30d!=null&&Math.abs(r.trend_30d)>=20).map(r=>({name:r.ingredients?.name,delta:r.trend_30d}));
   return {days:daysAgo(last),tracked:rows.length,bigVal:rows.length,bigUnit:'interventions',
-    sub:`${strong} à preuve solide (≥70)`,blockTitle,blockHTML,
+    sub:`${strong} à preuve solide (≥70)`,blockTitle,blockHTML,strongMovers,
     meta:`Capture quotidienne · dernier ${last||'—'}`};
 }
 async function alcyone(site){
@@ -167,7 +177,18 @@ function mv(name,delta,right){
   return `<div class="mv"><span>${esc(name||'—')}</span><span class="d ${cls}">${esc(d)}</span></div>`;
 }
 
-const health=[];
+const health=[]; const ALERTS=[];
+function renderAlerts(){
+  const el=document.getElementById('alerts'); if(!el) return; el.hidden=false;
+  const ord={crit:0,warn:1};
+  ALERTS.sort((a,b)=>ord[a.sev]-ord[b.sev]);
+  if(!ALERTS.length){
+    el.innerHTML='<div class="apanel"><span class="dot ok"></span><div><b>Rien à signaler</b> — tous les index sont à jour.</div></div>';
+    return;
+  }
+  el.innerHTML='<div class="ahead"><span class="k">Alertes</span><span class="acount">'+ALERTS.length+'</span></div>'+
+    ALERTS.map(a=>'<div class="arow '+a.sev+'"><span class="dot '+a.sev+'"></span><span class="asite">'+esc(a.site)+'</span><span class="amsg">'+esc(a.msg)+'</span></div>').join('');
+}
 async function run(){
   const grid=document.getElementById('grid');
   grid.innerHTML=SITES.map(s=>`<div class="card" id="c-${s.key}">
@@ -175,6 +196,7 @@ async function run(){
       <div class="hbadge"><span class="dot" id="dot-${s.key}"></span><span id="fr-${s.key}">…</span></div></div>
     <div class="spin" id="sp-${s.key}"></div></div>`).join('');
   await Promise.all(SITES.map(renderCard));
+  renderAlerts();
   // global status
   const worst = health.includes('crit')?'crit':health.includes('warn')?'warn':health.length?'ok':'warn';
   document.getElementById('gdot').className='dot '+worst;
@@ -189,6 +211,9 @@ async function renderCard(site){
     health.push(f.cls||'warn');
     document.getElementById('dot-'+site.key).className='dot '+f.cls;
     document.getElementById('fr-'+site.key).textContent=f.txt;
+    if(f.cls==='crit') ALERTS.push({sev:'crit',site:site.name,msg:'Données en retard — '+f.txt});
+    else if(f.cls==='warn') ALERTS.push({sev:'warn',site:site.name,msg:'À surveiller — '+f.txt});
+    (d.strongMovers||[]).forEach(m=>ALERTS.push({sev:'warn',site:site.name,msg:'Variation forte : '+(m.name||'—')+' ('+(m.delta>0?'+':'')+m.delta+')'}));
     card.innerHTML=`
       <div class="chead"><div><div class="cname">${site.name}</div><div class="ctag">${site.tag}</div></div>
         <div class="hbadge"><span class="dot ${f.cls}"></span><span>${f.txt}</span></div></div>
@@ -198,6 +223,7 @@ async function renderCard(site){
       <div class="meta">${esc(d.meta)}</div>`;
   }catch(e){
     health.push(e.nokey?'warn':'crit');
+    ALERTS.push({sev:e.nokey?'warn':'crit',site:site.name,msg:e.nokey?'Clé publique manquante':'Base injoignable ('+e.message+')'});
     document.getElementById('dot-'+site.key).className='dot '+(e.nokey?'warn':'crit');
     document.getElementById('fr-'+site.key).textContent=e.nokey?'clé requise':'erreur';
     card.classList.add('err');
