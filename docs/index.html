@@ -97,12 +97,17 @@ const SITES = [
   { key:'alcyone', name:'ALCYONE', tag:'Space Economy',
     url:'https://jlvghejppvlmrchuchqj.supabase.co',
     anon:'sb_publishable_YP3KkPpAFc2Bwlp7pvOmvA_3Wj2hkD8',
-    load:alcyone },
+    cadence:'weekly', load:alcyone },
 ];
 
 const DAY=86400000;
 const daysAgo=(d)=>d?Math.floor((Date.now()-new Date(d))/DAY):null;
-const freshness=(days)=> days==null?{cls:'',txt:'—'} : days<=1?{cls:'ok',txt:days===0?"aujourd'hui":'hier'} : days<=3?{cls:'warn',txt:'il y a '+days+' j'} : {cls:'crit',txt:'il y a '+days+' j'};
+const freshness=(days,cadence)=>{
+  if(days==null) return {cls:'',txt:'—'};
+  const txt = days===0?"aujourd'hui" : days===1?'hier' : 'il y a '+days+' j';
+  if(cadence==='weekly') return {cls: days<=8?'ok':days<=14?'warn':'crit', txt};
+  return {cls: days<=1?'ok':days<=3?'warn':'crit', txt};
+};
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function q(site, path){
   const r=await fetch(`${site.url}/rest/v1/${path}`,{headers:{apikey:site.anon,Authorization:`Bearer ${site.anon}`}});
@@ -180,7 +185,7 @@ async function renderCard(site){
   const card=document.getElementById('c-'+site.key);
   try{
     const d=await site.load(site);
-    const f=freshness(d.days);
+    const f=freshness(d.days, site.cadence);
     health.push(f.cls||'warn');
     document.getElementById('dot-'+site.key).className='dot '+f.cls;
     document.getElementById('fr-'+site.key).textContent=f.txt;
