@@ -1,0 +1,208 @@
+<title>Dreamotion Control</title>
+<style>
+  /* Layout: status bar, then one monitoring card per index site (health + headline + movers). */
+  :root{
+    --bg:#0D1311; --surface:#141D19; --surface-2:#101814; --fg:#EAF2EE; --muted:#90A49B;
+    --line:#223029; --accent:#34D399; --star:#E3C25A;
+    --ok:#34D399; --warn:#E0B45A; --crit:#E8735C; --mut-dot:#5B6B63;
+    --font-display:'Fraunces',Georgia,serif; --font-body:'IBM Plex Sans',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --bg:#F3F6F3; --surface:#FFFFFF; --surface-2:#FAFBFA; --fg:#16211C; --muted:#5B6B63;
+    --line:#E3E9E4; --accent:#0E7C5A; --star:#B88A1E;
+    --ok:#0E7C5A; --warn:#B5791A; --crit:#C0432E; --mut-dot:#AEBAB3; color-scheme:light;
+  }
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    --bg:#F3F6F3; --surface:#FFFFFF; --surface-2:#FAFBFA; --fg:#16211C; --muted:#5B6B63;
+    --line:#E3E9E4; --accent:#0E7C5A; --star:#B88A1E;
+    --ok:#0E7C5A; --warn:#B5791A; --crit:#C0432E; --mut-dot:#AEBAB3; color-scheme:light;
+  }}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font-family:var(--font-body);line-height:1.5;color-scheme:dark}
+  .wrap{max-width:1040px;margin:0 auto;padding-inline:20px}
+  header.top{border-bottom:1px solid var(--line)}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding-block:18px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand svg{width:26px;height:26px;color:var(--star)}
+  .brand h1{font-family:var(--font-display);font-weight:600;font-size:23px;margin:0;letter-spacing:.3px}
+  .brand .sub{font-size:11px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase}
+  .status{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);
+    font-family:var(--font-mono)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--mut-dot);flex:none}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.crit{background:var(--crit)}
+  .lede{padding-block:22px 8px}
+  .lede p{margin:0;color:var(--muted);max-width:66ch;font-size:15px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-block:20px 40px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;
+    display:flex;flex-direction:column;gap:14px;min-width:0}
+  .card.err{opacity:.85}
+  .chead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .cname{font-family:var(--font-display);font-size:22px;font-weight:600;line-height:1}
+  .ctag{font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:5px}
+  .hbadge{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+    font-family:var(--font-mono);white-space:nowrap}
+  .big{font-family:var(--font-display);font-weight:600;font-size:44px;line-height:1;
+    font-variant-numeric:tabular-nums}
+  .big .u{font-size:16px;color:var(--muted);font-family:var(--font-body)}
+  .sub2{font-size:13px;color:var(--muted);margin-top:-4px}
+  .block{border-top:1px solid var(--line);padding-top:12px}
+  .block .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:8px}
+  .mv{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;font-size:13.5px}
+  .mv .d{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .d.up{color:var(--ok)} .d.down{color:var(--crit)} .d.flat{color:var(--muted)}
+  .narr{font-size:13.5px;color:var(--fg);line-height:1.55}
+  .meta{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:auto;
+    padding-top:10px;border-top:1px solid var(--line)}
+  .pending{font-size:13px;color:var(--muted);background:var(--surface-2);border:1px dashed var(--line);
+    border-radius:10px;padding:14px;line-height:1.5}
+  .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:s 1s linear infinite;margin:14px auto}
+  @keyframes s{to{transform:rotate(360deg)}}
+  footer{border-top:1px solid var(--line);padding-block:22px 40px;color:var(--muted);font-size:12.5px}
+  @media (max-width:820px){.grid{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1.5l2.6 6.4 6.9.4-5.3 4.4 1.8 6.7L12 16.9 6 19.8l1.8-6.7L2.5 8.7l6.9-.4z"/></svg>
+      <div><h1>Dreamotion Control</h1><div class="sub">Tour de contrôle · Index Factory</div></div>
+    </div>
+    <div class="status"><span class="dot" id="gdot"></span><span id="gtxt">Analyse en cours…</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="lede">
+    <p>État de santé et intelligence quotidienne de chaque index : la capture a-t-elle tourné, les données sont-elles fraîches, et qu'est-ce qui a bougé. Lecture live des bases — rien n'est stocké ici.</p>
+  </section>
+  <section class="grid" id="grid"></section>
+  <footer id="foot">Tour de contrôle Dreamotion · lecture seule.</footer>
+</div>
+
+<script>
+const SITES = [
+  { key:'maia', name:'MAIA', tag:'Longevity Credibility',
+    url:'https://acdzxnokhersmnpxvdtu.supabase.co',
+    anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjZHp4bm9raGVyc21ucHh2ZHR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4Njg2NTksImV4cCI6MjEwNjQ0NDY1OX0.HOo9CvpxhAYCX5u9-UjsOUpZECY8odElHaWBTWMIfLw',
+    load:maia },
+  { key:'alcyone', name:'ALCYONE', tag:'Space Economy',
+    url:'https://jlvghejppvlmrchuchqj.supabase.co',
+    anon:'sb_publishable_YP3KkPpAFc2Bwlp7pvOmvA_3Wj2hkD8',
+    load:alcyone },
+  { key:'electra', name:'ELECTRA', tag:'AI Agents',
+    url:'https://rqgnjavfbahderwxykox.supabase.co',
+    anon:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJxZ25qYXZmYmFoZGVyd3h5a294Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0NTMyOTUsImV4cCI6MjEwNjAyOTI5NX0.wBIk4-xCS1geQ9xZ-JX-PJxQ71t4q8aXp53FE6pIkh0',
+    load:electra },
+];
+
+const DAY=86400000;
+const daysAgo=(d)=>d?Math.floor((Date.now()-new Date(d))/DAY):null;
+const freshness=(days)=> days==null?{cls:'',txt:'—'} : days<=1?{cls:'ok',txt:days===0?"aujourd'hui":'hier'} : days<=3?{cls:'warn',txt:'il y a '+days+' j'} : {cls:'crit',txt:'il y a '+days+' j'};
+const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function q(site, path){
+  const r=await fetch(`${site.url}/rest/v1/${path}`,{headers:{apikey:site.anon,Authorization:`Bearer ${site.anon}`}});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+// ---- adapters: each returns {fresh(days), tracked, bigVal, bigUnit, sub, blockTitle, blockHTML, meta} ----
+async function maia(site){
+  const rows=await q(site,'score_meta?select=credibility_score,confidence_level,trend_30d,trend_label,observations,last_captured_at,ingredients(name)&order=credibility_score.desc.nullslast');
+  const last=rows.map(r=>r.last_captured_at).filter(Boolean).sort().pop();
+  const strong=rows.filter(r=>r.credibility_score>=70).length;
+  const movers=rows.filter(r=>r.trend_30d!=null&&Math.round(r.trend_30d)!==0)
+    .sort((a,b)=>Math.abs(b.trend_30d)-Math.abs(a.trend_30d)).slice(0,4);
+  let blockHTML, blockTitle;
+  if(movers.length){ blockTitle='Ce qui bouge';
+    blockHTML=movers.map(m=>mv(m.ingredients?.name,m.trend_30d)).join('');
+  } else { blockTitle='Top crédibilité';
+    blockHTML=rows.slice(0,4).map(r=>mv(r.ingredients?.name,null,Math.round(r.credibility_score)+'/100')).join('');
+  }
+  return {days:daysAgo(last),tracked:rows.length,bigVal:rows.length,bigUnit:'interventions',
+    sub:`${strong} à preuve solide (≥70)`,blockTitle,blockHTML,
+    meta:`Capture quotidienne · dernier ${last||'—'}`};
+}
+async function alcyone(site){
+  const [eds,sats]=await Promise.all([
+    q(site,'weekly_editions?select=week_label,edition_date,index_value,connectivity,infrastructure,launch,market,narrative,auto_summary,confidence,methodology_version&order=edition_date.desc&limit=1'),
+    q(site,'satellite_history?select=date&order=date.desc&limit=1').catch(()=>[])
+  ]);
+  const e=eds[0]||{}; const lastSat=sats[0]?.date;
+  const last=[e.edition_date,lastSat].filter(Boolean).sort().pop();
+  const narr=e.narrative||e.auto_summary||'';
+  const blockHTML=`<div class="narr">${esc(narr).slice(0,260)||'—'}</div>`;
+  return {days:daysAgo(last),tracked:null,bigVal:e.index_value??'—',bigUnit:'/100',
+    sub:`Confiance : ${esc(e.confidence||'—')} · C ${e.connectivity} · I ${e.infrastructure} · L ${e.launch} · M ${e.market}`,
+    blockTitle:'Ce qui a bougé',blockHTML,
+    meta:`Space Economy Index · ${esc(e.week_label||'')} · ${esc(e.methodology_version||'')}`};
+}
+async function electra(site){
+  if(!site.anon) { const err=new Error('nokey'); err.nokey=true; throw err; }
+  const stats=await q(site,'v_site_stats?select=mcp_servers,agents,tasks,capabilities,active_sources,signals_24h,last_update&limit=1');
+  const s=stats[0]||{};
+  const blockHTML = mv('Serveurs MCP', null, String(s.mcp_servers ?? '—'))
+    + mv('Agents', null, String(s.agents ?? '—'))
+    + mv('Capacités', null, String(s.capabilities ?? '—'))
+    + mv('Signaux (24 h)', null, String(s.signals_24h ?? '—'));
+  return {days:daysAgo(s.last_update),tracked:s.mcp_servers,
+    bigVal:s.mcp_servers ?? '—',bigUnit:'serveurs MCP',
+    sub:`${s.agents ?? 0} agents · ${s.tasks ?? 0} tâches · ${s.capabilities ?? 0} capacités`,
+    blockTitle:'Couverture & signaux',blockHTML,
+    meta:`AI Agents Index · ${s.active_sources ?? 0} sources actives`};
+}
+function mv(name,delta,right){
+  let d='',cls='flat';
+  if(delta!=null){cls=delta>0?'up':delta<0?'down':'flat';d=(delta>0?'▲ +':delta<0?'▼ ':'→ ')+Math.abs(delta);}
+  else if(right){d=right;}
+  return `<div class="mv"><span>${esc(name||'—')}</span><span class="d ${cls}">${esc(d)}</span></div>`;
+}
+
+const health=[];
+async function run(){
+  const grid=document.getElementById('grid');
+  grid.innerHTML=SITES.map(s=>`<div class="card" id="c-${s.key}">
+    <div class="chead"><div><div class="cname">${s.name}</div><div class="ctag">${s.tag}</div></div>
+      <div class="hbadge"><span class="dot" id="dot-${s.key}"></span><span id="fr-${s.key}">…</span></div></div>
+    <div class="spin" id="sp-${s.key}"></div></div>`).join('');
+  await Promise.all(SITES.map(renderCard));
+  // global status
+  const worst = health.includes('crit')?'crit':health.includes('warn')?'warn':health.length?'ok':'warn';
+  document.getElementById('gdot').className='dot '+worst;
+  document.getElementById('gtxt').textContent =
+    worst==='ok'?'Tous les systèmes OK':worst==='warn'?'Attention requise':'Incident détecté';
+}
+async function renderCard(site){
+  const card=document.getElementById('c-'+site.key);
+  try{
+    const d=await site.load(site);
+    const f=freshness(d.days);
+    health.push(f.cls||'warn');
+    document.getElementById('dot-'+site.key).className='dot '+f.cls;
+    document.getElementById('fr-'+site.key).textContent=f.txt;
+    card.innerHTML=`
+      <div class="chead"><div><div class="cname">${site.name}</div><div class="ctag">${site.tag}</div></div>
+        <div class="hbadge"><span class="dot ${f.cls}"></span><span>${f.txt}</span></div></div>
+      <div><div class="big">${esc(d.bigVal)}<span class="u"> ${esc(d.bigUnit)}</span></div>
+        <div class="sub2">${esc(d.sub)}</div></div>
+      <div class="block"><div class="k">${esc(d.blockTitle)}</div>${d.blockHTML}</div>
+      <div class="meta">${esc(d.meta)}</div>`;
+  }catch(e){
+    health.push(e.nokey?'warn':'crit');
+    document.getElementById('dot-'+site.key).className='dot '+(e.nokey?'warn':'crit');
+    document.getElementById('fr-'+site.key).textContent=e.nokey?'clé requise':'erreur';
+    card.classList.add('err');
+    card.innerHTML=`
+      <div class="chead"><div><div class="cname">${site.name}</div><div class="ctag">${site.tag}</div></div>
+        <div class="hbadge"><span class="dot ${e.nokey?'warn':'crit'}"></span><span>${e.nokey?'clé requise':'erreur'}</span></div></div>
+      <div class="pending">${e.nokey
+        ? "En attente de la clé publique (anon) d'Electra pour lire ses données. Elle est publique et sans risque — à récupérer dans Supabase → Settings → API."
+        : "Impossible de lire cette base pour l'instant ("+esc(e.message)+")."}</div>`;
+  }
+}
+run();
+</script>
