@@ -10,6 +10,9 @@ concurrency:
   group: dreamotion-digest
   cancel-in-progress: false
 
+permissions:
+  contents: write   # pour publier le diagnostic en commentaire de commit si échec
+
 jobs:
   digest:
     runs-on: ubuntu-latest
@@ -19,9 +22,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Send digest
+        id: send
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DIGEST_TO: ${{ secrets.DIGEST_TO }}
           DIGEST_FROM: ${{ secrets.DIGEST_FROM }}
-        run: node scripts/digest.js
+        run: |
+          set -o pipefail
+          node scripts/digest.js 2>&1 | tee digest-output.log
+
+      # Si l'envoi échoue, on publie la sortie (sans secrets) en commentaire de
+      # commit — lisible dans GitHub et par l'assistant, pour voir la vraie cause.
+      - name: Report failure as commit comment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          LOG="$(tail -c 4000 digest-output.log 2>/dev/null || echo '(pas de sortie capturée)')"
+          BODY=$(printf '🚨 **Dreamotion daily digest — échec**\n\n[Voir le run](%s)\n\n```\n%s\n```\n' "$RUN_URL" "$LOG")
+          jq -n --arg b "$BODY" '{body:$b}' > payload.json
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/comments" \
+            -d @payload.json > /dev/null && echo "Diagnostic publié en commentaire de commit."

@@ -15,7 +15,11 @@ const DIGEST_FROM = process.env.DIGEST_FROM || 'Dreamotion Control <onboarding@r
 const DASHBOARD = 'https://tony4110.github.io/DREAMOTIONINDEX.COM/';
 
 if (!RESEND_API_KEY || !DIGEST_TO) {
-  console.error('Missing RESEND_API_KEY or DIGEST_TO env.');
+  console.error('SETUP ERROR — a required GitHub Actions secret is missing:');
+  console.error('  RESEND_API_KEY présent :', RESEND_API_KEY ? 'oui' : 'NON — à ajouter');
+  console.error('  DIGEST_TO présent      :', DIGEST_TO ? 'oui' : 'NON — à ajouter');
+  console.error('  DIGEST_FROM présent    :', process.env.DIGEST_FROM ? 'oui (sinon onboarding@resend.dev)' : 'non (défaut onboarding@resend.dev)');
+  console.error('Ajoute-les dans : Settings → Secrets and variables → Actions → New repository secret.');
   process.exit(1);
 }
 
@@ -149,8 +153,19 @@ async function main() {
     body: JSON.stringify({ from: DIGEST_FROM, to: [DIGEST_TO], subject, html, text }),
   });
   const body = await res.text();
-  if (!res.ok) { console.error('Resend error', res.status, body); process.exit(1); }
-  console.log('Digest sent:', subject, '|', body.slice(0, 120));
+  if (!res.ok) {
+    console.error('RESEND ERROR', res.status, body);
+    if (res.status === 403 && /testing emails to your own|own email address/i.test(body)) {
+      console.error('CAUSE : l\'expéditeur onboarding@resend.dev ne peut écrire qu\'à l\'adresse du compte Resend.');
+      console.error('FIX : vérifie un domaine dans Resend (resend.com/domains), puis mets DIGEST_FROM = "Dreamotion <control@ton-domaine>".');
+    } else if (res.status === 401 || res.status === 403) {
+      console.error('CAUSE probable : RESEND_API_KEY invalide/révoquée, ou domaine expéditeur non vérifié.');
+    } else if (res.status === 422) {
+      console.error('CAUSE probable : DIGEST_FROM ou DIGEST_TO mal formé, ou domaine from non vérifié.');
+    }
+    process.exit(1);
+  }
+  console.log('Digest envoyé :', subject, '|', body.slice(0, 120));
 }
 
 main().catch(e => { console.error('FATAL', e); process.exit(1); });
